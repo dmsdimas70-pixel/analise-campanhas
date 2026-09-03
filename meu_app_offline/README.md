@@ -26,18 +26,25 @@ Se não tiver o Python instalado:
 1. Clique com o botão direito no arquivo baixado (`.zip`) e selecione **"Extrair Tudo..."**.
 2. Abra a pasta descompactada `meu_app_offline`.
 
-### 3. Iniciar o Aplicativo (Apenas 2 cliques!)
-1. Dê **dois cliques** no arquivo **`run.bat`**.
-2. Uma janela preta do Prompt de Comando irá se abrir.
-3. O script irá:
-   - Verificar e instalar automaticamente todas as bibliotecas necessárias (`requirements.txt`).
-   - Iniciar o servidor local.
-4. Quando você visualizar a mensagem:
-   ```text
-   >>> Aplicativo rodando com sucesso em http://localhost:7860 <<<
-   ```
-5. Abra o seu navegador (Chrome, Edge, Firefox, Brave) e acesse:
-   👉 **[http://localhost:7860](http://localhost:7860)**
+### 3. Iniciar o Aplicativo (Apenas 2 cliques no arquivo .EXE!)
+1. Dê **dois cliques** no arquivo executável **`iniciar_programa.exe`** (ou `MeuApp.exe` / `app.exe`).
+2. O executável nativo do Windows irá:
+   - Verificar se o Python está disponível no seu computador.
+   - Instalar e verificar automaticamente todas as bibliotecas necessárias (`requirements.txt`).
+   - Abrir automaticamente seu navegador padrão em:
+     👉 **[http://localhost:7860](http://localhost:7860)**
+   - Manter o servidor local rodando de forma 100% offline.
+
+*(Alternativa: você também pode usar o arquivo `run.bat` para iniciar com 2 cliques).*
+
+---
+
+## 💾 Salvamento Permanente de Dados (Nada se perde ao fechar!)
+
+O programa possui **persistência em disco integrada**:
+- Na aba **"📝 Editor de Planilha & Arquivos"**, você pode editar clientes diretamente nas células ou cadastrar novos clientes.
+- Ao clicar em **"Salvar Alterações no Disco"** ou ao cadastrar um atendimento na aba principal, os dados são salvos diretamente no arquivo permanente `data/clientes.csv` e `data/banco_offline.json`.
+- **Garantia:** Se o programa for fechado, o computador for desligado ou reiniciado, **nenhum dado será perdido**. Ao abrir novamente com 2 cliques no `.exe`, todas as alterações anteriores continuarão lá!
 
 ---
 
@@ -46,6 +53,7 @@ Se não tiver o Python instalado:
 Para fechar o programa:
 - Clique na janela preta do Prompt de Comando e pressione as teclas **`Ctrl + C`**, ou
 - Simplesmente **feche a janela preta** no "X".
+- Todos os seus dados já estarão devidamente salvos no disco.
 
 ---
 
@@ -53,16 +61,19 @@ Para fechar o programa:
 
 ```text
 /meu_app_offline
-├── app.py              # Código principal refatorado com servidor Gradio local
-├── data/               # Coloque aqui seus arquivos CSV, JSON ou modelos (.pkl, .h5, .onnx)
-│   └── .gitkeep
-├── outputs/            # Todos os relatórios, logs e predições são gravados aqui
-│   └── .gitkeep
-├── requirements.txt    # Lista de dependências Python
-├── run.bat             # Inicializador automático para Windows (1 clique)
-├── .gitignore          # Arquivos ignorados pelo Git
-├── .env.example        # Exemplo de chaves (opcional)
-└── README.md           # Este manual de instruções
+├── iniciar_programa.exe # Executável Windows portátil (2 cliques para abrir)
+├── MeuApp.exe           # Atalho executável adicional
+├── app.py               # Código principal com editor de planilhas e ML local
+├── data/                # Banco de dados local permanente
+│   ├── clientes.csv     # Planilha de clientes salva permanentemente
+│   ├── banco_offline.json # Cópia de segurança em formato JSON
+│   └── clientes_amostra.csv
+├── outputs/             # Históricos de atendimentos e relatórios gravados
+│   └── historico_atendimentos.csv
+├── requirements.txt     # Lista de dependências Python
+├── run.bat              # Inicializador alternativo (.bat)
+├── .env.example         # Exemplo de chaves (opcional)
+└── README.md            # Este manual de instruções
 ```
 
 ---

@@ -37,9 +37,11 @@ load_dotenv(BASE_DIR / ".env")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
-# Caminho do modelo local dentro da pasta data/
+# Caminho do modelo local e arquivos persistentes dentro da pasta data/
 MODEL_PATH = DATA_DIR / "modelo_preditivo.pkl"
 SAMPLE_DATA_PATH = DATA_DIR / "clientes_amostra.csv"
+CLIENTS_DATA_PATH = DATA_DIR / "clientes.csv"
+OFFLINE_DB_PATH = DATA_DIR / "banco_offline.json"
 
 # ---------------------------------------------------------------------------
 # 2. INICIALIZAÇÃO E CARREGAMENTO DE MODELOS / DADOS LOCAIS (MODO OFFLINE)
@@ -63,7 +65,19 @@ def inicializar_dados_e_modelo():
         amostra.to_csv(SAMPLE_DATA_PATH, index=False, encoding="utf-8")
         print(f"[INFO] Arquivo de dados de demonstração criado em: {SAMPLE_DATA_PATH}")
 
-    # 2. Cria ou carrega modelo de Machine Learning
+    # 2. Garante que clientes.csv exista para edição persistente
+    if not CLIENTS_DATA_PATH.exists():
+        df_base = pd.DataFrame([
+            {"id": 1, "nome": "Maria Oliveira", "canal": "Instagram", "valor": 2500.0, "tempo_min": 12, "score": 0.85, "status": "Ativo", "notas": "Interesse no produto principal"},
+            {"id": 2, "nome": "João Santos", "canal": "Google Ads", "valor": 3800.0, "tempo_min": 8, "score": 0.91, "status": "Em Negociação", "notas": "Aguardando proposta formal"},
+            {"id": 3, "nome": "Ana Paula Costa", "canal": "Indicação", "valor": 5200.0, "tempo_min": 5, "score": 0.96, "status": "Fechado", "notas": "Cliente recomendada pelo Dr. Carlos"},
+            {"id": 4, "nome": "Ricardo Pereira", "canal": "Passante / Loja Física", "valor": 1200.0, "tempo_min": 2, "score": 0.75, "status": "Ativo", "notas": "Primeira visita à loja"},
+            {"id": 5, "nome": "Fernanda Lima", "canal": "Recompra", "valor": 3100.0, "tempo_min": 15, "score": 0.92, "status": "Fechado", "notas": "Recompra semestral programada"}
+        ])
+        df_base.to_csv(CLIENTS_DATA_PATH, index=False, encoding="utf-8")
+        print(f"[INFO] Arquivo de clientes inicializado em: {CLIENTS_DATA_PATH}")
+
+    # 3. Cria ou carrega modelo de Machine Learning
     if not MODEL_PATH.exists():
         try:
             from sklearn.ensemble import RandomForestRegressor
@@ -79,6 +93,77 @@ def inicializar_dados_e_modelo():
 
 # Executa a checagem inicial
 inicializar_dados_e_modelo()
+
+# ---------------------------------------------------------------------------
+# PERSISTÊNCIA EM DISCO: CARREGAR E SALVAR ARQUIVOS
+# ---------------------------------------------------------------------------
+def carregar_clientes_do_disco() -> pd.DataFrame:
+    """Carrega os dados persistidos de data/clientes.csv."""
+    if CLIENTS_DATA_PATH.exists():
+        try:
+            return pd.read_csv(CLIENTS_DATA_PATH, encoding="utf-8")
+        except Exception as e:
+            print(f"[AVISO] Falha ao carregar {CLIENTS_DATA_PATH}: {e}")
+    inicializar_dados_e_modelo()
+    return pd.read_csv(CLIENTS_DATA_PATH, encoding="utf-8")
+
+def salvar_clientes_no_disco(df_editado: pd.DataFrame) -> str:
+    """
+    Grava permanentemente no disco em data/clientes.csv e data/banco_offline.json.
+    Garante que se o usuário fechar o programa e reabrir, nada seja perdido.
+    """
+    try:
+        if df_editado is None:
+            return "⚠️ A tabela está vazia. Nenhuma alteração gravada."
+            
+        df_editado.to_csv(CLIENTS_DATA_PATH, index=False, encoding="utf-8")
+        
+        # Também sincroniza em JSON estruturado
+        dados_json = df_editado.to_dict(orient="records")
+        with open(OFFLINE_DB_PATH, "w", encoding="utf-8") as f:
+            json.dump({
+                "versao": "1.0",
+                "atualizado_em": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "total_registros": len(df_editado),
+                "registros": dados_json
+            }, f, indent=2, ensure_ascii=False)
+            
+        hora = datetime.now().strftime("%H:%M:%S")
+        return f"💾 Alterações salvas permanentemente no disco ({CLIENTS_DATA_PATH.name}) às {hora}! Se o programa for fechado, nada será perdido."
+    except Exception as e:
+        return f"❌ Erro ao salvar arquivo no disco: {e}"
+
+def adicionar_novo_cliente(df_atual: pd.DataFrame, nome: str, canal: str, valor: float, tempo: int, status: str, notas: str):
+    """Insere novo cliente na tabela e já persiste automaticamente no disco."""
+    if not nome or not nome.strip():
+        nome = f"Cliente #{int(time.time()) % 10000}"
+        
+    df_valido = df_atual if df_atual is not None else carregar_clientes_do_disco()
+    
+    max_id = 0
+    if "id" in df_valido.columns and len(df_valido) > 0:
+        try:
+            max_id = int(df_valido["id"].max())
+        except Exception:
+            max_id = len(df_valido)
+            
+    novo_id = max_id + 1
+    score = round(max(0.1, min(0.99, 1.0 - (tempo / 120.0) + (valor / 10000.0))), 2)
+    
+    nova_linha = {
+        "id": novo_id,
+        "nome": nome.strip(),
+        "canal": canal,
+        "valor": float(valor),
+        "tempo_min": int(tempo),
+        "score": score,
+        "status": status or "Ativo",
+        "notas": notas.strip() if notas else "Cadastrado via interface"
+    }
+    
+    df_novo = pd.concat([df_valido, pd.DataFrame([nova_linha])], ignore_index=True)
+    msg = salvar_clientes_no_disco(df_novo)
+    return df_novo, f"✅ Cliente '{nome}' adicionado com sucesso! {msg}"
 
 # ---------------------------------------------------------------------------
 # 3. TRATAMENTO DE APIs EXTERNAS COM FALLBACK OFFLINE GARANTIDO
@@ -196,7 +281,22 @@ def processar_atendimento(nome_cliente: str, canal_origem: str, valor_estimado: 
     else:
         df_novo.to_csv(csv_path, mode="w", header=True, index=False, encoding="utf-8")
 
-    print(f"[SALVO] Resultado registrado com sucesso em: {json_path} e {csv_path}")
+    # PERSISTÊNCIA AUTOMÁTICA EM data/clientes.csv:
+    try:
+        df_existente = carregar_clientes_do_disco()
+        adicionar_novo_cliente(
+            df_atual=df_existente,
+            nome=registro['cliente'],
+            canal=canal_origem,
+            valor=valor_estimado,
+            tempo=tempo_resposta,
+            status="Atendido",
+            notas=observacoes
+        )
+    except Exception as e:
+        print(f"[AVISO] Falha ao auto-salvar em clientes.csv: {e}")
+
+    print(f"[SALVO] Resultado registrado com sucesso em: {json_path}, {csv_path} e {CLIENTS_DATA_PATH}")
 
     # 4. Formata saída visual para o usuário
     badge_modo = "🟢 MODO OFFLINE (Local)" if analise["modo"] == "offline" else "🔵 MODO ONLINE"
@@ -208,7 +308,7 @@ def processar_atendimento(nome_cliente: str, canal_origem: str, valor_estimado: 
         f"**Status da API:** {analise['mensagem']}\n\n"
         f"**Recomendação de Ação:** {analise['recomendacao']}\n\n"
         f"--- \n"
-        f"📁 *Resultados gravados automaticamente na pasta local `outputs/`.*"
+        f"💾 *Dados salvos automaticamente no disco (`data/clientes.csv` e `outputs/`). Se fechar o programa, nada será perdido!*"
     )
 
     tabela_insights = pd.DataFrame({
@@ -236,9 +336,9 @@ try:
     with gr.Blocks(title="Meu App Offline - ML & Analytics", theme=gr.themes.Soft()) as demo:
         gr.Markdown(
             """
-            # 🚀 Aplicativo Local Offline
-            ### Execução 100% no computador do usuário (Sem Google Colab / Sem Google Drive)
-            Os dados são lidos exclusivamente da pasta `data/` e os resultados são salvos em `outputs/`.
+            # 🚀 Aplicativo Local Offline (Executável Portátil)
+            ### 2 Cliques para abrir • Salvamento Permanente no Computador • Sem Nuvem
+            Edite seus clientes e atendimentos: **todas as alterações são gravadas no disco e nunca se perdem ao fechar o programa**.
             """
         )
 
@@ -256,17 +356,74 @@ try:
                     tempo_input = gr.Slider(label="Tempo de Espera para Atendimento (minutos)", minimum=1, maximum=180, value=12, step=1)
                     obs_input = gr.Textbox(label="Observações do Atendimento", placeholder="Ex: Demonstrou interesse no produto principal.", lines=2)
                     
-                    btn_executar = gr.Button("⚡ Executar Análise Local", variant="primary")
+                    btn_executar = gr.Button("⚡ Executar Análise & Salvar no Disco", variant="primary")
 
                 with gr.Column():
                     gr.Markdown("#### 📊 Resultado da Predição")
-                    saida_status = gr.Markdown(value="*Preencha os campos ao lado e clique em Executar Análise Local.*")
+                    saida_status = gr.Markdown(value="*Preencha os campos ao lado e clique em Executar Análise.*")
                     saida_tabela = gr.DataFrame(label="Insights do Atendimento")
 
             btn_executar.click(
                 fn=processar_atendimento,
                 inputs=[nome_input, canal_input, valor_input, tempo_input, obs_input],
                 outputs=[saida_status, saida_tabela]
+            )
+
+        with gr.Tab("📝 Editor de Planilha & Arquivos (Salvar Permanente)"):
+            gr.Markdown(
+                """
+                ### 💾 Planilha Interativa com Salvamento Permanente no Disco
+                Você pode **clicar e editar qualquer célula** da tabela abaixo (mudar nomes, canais, valores, status ou notas).  
+                Após editar, clique no botão **Salvar Alterações no Disco** para gravar o arquivo `data/clientes.csv`.  
+                **Garantia:** Se o programa for fechado ou o computador reiniciado, todos os seus dados continuam salvos!
+                """
+            )
+            
+            with gr.Row():
+                btn_salvar_tabela = gr.Button("💾 Salvar Alterações no Disco (Gravar Arquivo)", variant="primary", size="lg")
+                btn_recarregar_tabela = gr.Button("🔄 Recarregar do Disco", size="lg")
+
+            status_salvamento = gr.Markdown("🟢 *Arquivo conectado: data/clientes.csv pronto para edição e salvamento.*")
+
+            tabela_editavel = gr.DataFrame(
+                value=carregar_clientes_do_disco,
+                interactive=True,
+                label="Base de Clientes Editável (Clique duas vezes em uma célula para editar)",
+                wrap=True
+            )
+
+            btn_salvar_tabela.click(
+                fn=salvar_clientes_no_disco,
+                inputs=[tabela_editavel],
+                outputs=[status_salvamento]
+            )
+
+            btn_recarregar_tabela.click(
+                fn=carregar_clientes_do_disco,
+                outputs=[tabela_editavel]
+            )
+
+            gr.Markdown("---")
+            gr.Markdown("#### ➕ Adicionar Novo Registro Rapidamente à Planilha:")
+            with gr.Row():
+                cad_nome = gr.Textbox(label="Nome", placeholder="Ex: Lucas Ferreira", scale=2)
+                cad_canal = gr.Dropdown(
+                    label="Canal",
+                    choices=["Instagram", "Google Ads", "Indicação", "Passante", "WhatsApp", "Recompra"],
+                    value="Instagram",
+                    scale=2
+                )
+                cad_valor = gr.Number(label="Valor (R$)", value=1500.0, scale=1)
+                cad_tempo = gr.Number(label="Tempo (min)", value=10, scale=1)
+                cad_status = gr.Dropdown(label="Status", choices=["Ativo", "Em Negociação", "Fechado", "Pendente"], value="Ativo", scale=1)
+                cad_notas = gr.Textbox(label="Notas", placeholder="Obs do cliente...", scale=2)
+
+            btn_adicionar_novo = gr.Button("➕ Adicionar e Gravar no Arquivo", variant="secondary")
+
+            btn_adicionar_novo.click(
+                fn=adicionar_novo_cliente,
+                inputs=[tabela_editavel, cad_nome, cad_canal, cad_valor, cad_tempo, cad_status, cad_notas],
+                outputs=[tabela_editavel, status_salvamento]
             )
 
         with gr.Tab("📁 Histórico Gravado (Pasta outputs/)"):
@@ -278,11 +435,16 @@ try:
         with gr.Tab("ℹ️ Diagnóstico & Pastas Locais"):
             info_txt = f"""
             **Caminho Raiz do Aplicativo:** `{BASE_DIR}`  
+            **Arquivo de Clientes (data/clientes.csv):** `{CLIENTS_DATA_PATH}` ({'Presente' if CLIENTS_DATA_PATH.exists() else 'Será criado no 1º salvamento'})  
+            **Banco JSON (data/banco_offline.json):** `{OFFLINE_DB_PATH}`  
             **Pasta de Dados (data/):** `{DATA_DIR}`  
             **Pasta de Saídas (outputs/):** `{OUTPUTS_DIR}`  
             **Modelo Machine Learning:** `{MODEL_PATH}` (`{'Carregado' if MODEL_PATH.exists() else 'Não encontrado'}`)  
             **Status da Chave OpenAI:** `{'Configurada' if OPENAI_API_KEY else 'Ausente (Modo Offline Ativo)'}`  
             **Status da Chave Gemini:** `{'Configurada' if GEMINI_API_KEY else 'Ausente (Modo Offline Ativo)'}`  
+            
+            ---
+            🔒 **Garantia de Persistência:** Todos os arquivos de dados ficam salvos permanentemente na pasta local do programa. Se o programa for fechado, o Windows reiniciado ou desligado, todos os seus dados continuam 100% preservados!
             """
             gr.Markdown(info_txt)
 

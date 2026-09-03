@@ -354,6 +354,7 @@ export class AttributionDatabase {
   private instagramLogs: InstagramGrowthLog[] = [];
   private dailyStoreTraffic: DailyStoreTraffic[] = [];
   private indications: Indication[] = [];
+  private onChangeCallback?: () => void;
 
   constructor() {
     // Starts completely empty as requested ("zere todos os dados para começarem do nada")
@@ -364,12 +365,27 @@ export class AttributionDatabase {
     this.indications = [];
   }
 
+  public setOnChange(cb: () => void) {
+    this.onChangeCallback = cb;
+  }
+
+  private notifyChange() {
+    if (this.onChangeCallback) {
+      try {
+        this.onChangeCallback();
+      } catch (err) {
+        console.error('[DATABASE] Erro no listener de persistência:', err);
+      }
+    }
+  }
+
   public resetToEmpty() {
     this.leads = [];
     this.sales = [];
     this.instagramLogs = [];
     this.dailyStoreTraffic = [];
     this.indications = [];
+    this.notifyChange();
   }
 
   public resetToSeed() {
@@ -380,6 +396,7 @@ export class AttributionDatabase {
     this.sales = seed.sales;
     this.instagramLogs = [];
     this.indications = [];
+    this.notifyChange();
     this.dailyStoreTraffic = [
       {
         id: 'traffic-1',
@@ -465,6 +482,7 @@ export class AttributionDatabase {
       active: true
     });
 
+    this.notifyChange();
     return newCompany;
   }
 
@@ -472,6 +490,7 @@ export class AttributionDatabase {
     const idx = this.companies.findIndex(c => c.id === id);
     if (idx === -1) return null;
     this.companies[idx] = { ...this.companies[idx], ...data };
+    this.notifyChange();
     return this.companies[idx];
   }
 
@@ -483,6 +502,7 @@ export class AttributionDatabase {
     this.leads = this.leads.filter(l => l.company_id !== id);
     this.sales = this.sales.filter(s => s.company_id !== id);
     this.instagramLogs = this.instagramLogs.filter(log => log.company_id !== id);
+    this.notifyChange();
     return true;
   }
 
@@ -511,6 +531,7 @@ export class AttributionDatabase {
       created_at: new Date().toISOString()
     };
     this.sellers.push(newSeller);
+    this.notifyChange();
     return newSeller;
   }
 
@@ -518,6 +539,7 @@ export class AttributionDatabase {
     const idx = this.sellers.findIndex(s => s.id === id);
     if (idx === -1) return null;
     this.sellers[idx] = { ...this.sellers[idx], ...data };
+    this.notifyChange();
     return this.sellers[idx];
   }
 
@@ -525,6 +547,7 @@ export class AttributionDatabase {
     const idx = this.sellers.findIndex(s => s.id === id);
     if (idx === -1) return false;
     this.sellers.splice(idx, 1);
+    this.notifyChange();
     return true;
   }
 
@@ -593,11 +616,13 @@ export class AttributionDatabase {
 
   public addLead(lead: CustomerLead): CustomerLead {
     this.leads.unshift(lead);
+    this.notifyChange();
     return lead;
   }
 
   public addSale(sale: Sale): Sale {
     this.sales.unshift(sale);
+    this.notifyChange();
     return sale;
   }
 
@@ -605,6 +630,7 @@ export class AttributionDatabase {
     const index = this.sales.findIndex(s => s.id === id);
     if (index === -1) return null;
     this.sales[index] = { ...this.sales[index], ...updates };
+    this.notifyChange();
     return this.sales[index];
   }
 
@@ -612,11 +638,13 @@ export class AttributionDatabase {
     const saleIndex = this.sales.findIndex(s => s.id === id);
     if (saleIndex !== -1) {
       this.sales[saleIndex].arrival_level = level;
+      this.notifyChange();
       return true;
     }
     const leadIndex = this.leads.findIndex(l => l.id === id);
     if (leadIndex !== -1) {
       this.leads[leadIndex].arrival_level = level;
+      this.notifyChange();
       return true;
     }
     return false;
@@ -625,14 +653,18 @@ export class AttributionDatabase {
   public deleteSale(id: string): boolean {
     const initialLength = this.sales.length;
     this.sales = this.sales.filter(s => s.id !== id);
-    return this.sales.length < initialLength;
+    const deleted = this.sales.length < initialLength;
+    if (deleted) this.notifyChange();
+    return deleted;
   }
 
   public deleteLead(id: string): boolean {
     const initialLength = this.leads.length;
     this.leads = this.leads.filter(l => l.id !== id);
     this.sales = this.sales.filter(s => s.customer_id !== id);
-    return this.leads.length < initialLength;
+    const deleted = this.leads.length < initialLength;
+    if (deleted) this.notifyChange();
+    return deleted;
   }
 
   // Quick sale/lead entry
@@ -724,6 +756,7 @@ export class AttributionDatabase {
       this.sales.unshift(newSale);
     }
 
+    this.notifyChange();
     return { lead, sale: newSale };
   }
 
@@ -744,6 +777,7 @@ export class AttributionDatabase {
       created_at: new Date().toISOString()
     };
     this.instagramLogs.unshift(newLog);
+    this.notifyChange();
     return newLog;
   }
 
@@ -756,13 +790,16 @@ export class AttributionDatabase {
       updated.net_followers_growth = Number(updated.new_followers || 0) - Number(updated.unfollows || 0);
     }
     this.instagramLogs[idx] = updated;
+    this.notifyChange();
     return updated;
   }
 
   public deleteInstagramLog(id: string): boolean {
     const initialLen = this.instagramLogs.length;
     this.instagramLogs = this.instagramLogs.filter(l => l.id !== id);
-    return this.instagramLogs.length < initialLen;
+    const deleted = this.instagramLogs.length < initialLen;
+    if (deleted) this.notifyChange();
+    return deleted;
   }
 
   public getInstagramMetricsSummary(startDate?: string, endDate?: string, companyId?: string): InstagramMetricsSummary {
@@ -890,6 +927,7 @@ export class AttributionDatabase {
     };
 
     this.dailyStoreTraffic.unshift(newRecord);
+    this.notifyChange();
     return newRecord;
   }
 
@@ -912,13 +950,16 @@ export class AttributionDatabase {
       : 0;
 
     this.dailyStoreTraffic[idx] = updated;
+    this.notifyChange();
     return updated;
   }
 
   public deleteDailyStoreTraffic(id: string): boolean {
     const initialLen = this.dailyStoreTraffic.length;
     this.dailyStoreTraffic = this.dailyStoreTraffic.filter(t => t.id !== id);
-    return this.dailyStoreTraffic.length < initialLen;
+    const deleted = this.dailyStoreTraffic.length < initialLen;
+    if (deleted) this.notifyChange();
+    return deleted;
   }
 
   public getDailyStoreTrafficSummary(startDate?: string, endDate?: string, companyId?: string): DailyStoreTrafficSummary {
@@ -1026,6 +1067,7 @@ export class AttributionDatabase {
       if (Array.isArray(data.instagramLogs)) this.instagramLogs = data.instagramLogs;
       if (Array.isArray(data.dailyStoreTraffic)) this.dailyStoreTraffic = data.dailyStoreTraffic;
       if (Array.isArray(data.indications)) this.indications = data.indications;
+      this.notifyChange();
       return true;
     }
     return false;

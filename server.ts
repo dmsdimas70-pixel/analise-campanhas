@@ -14,6 +14,54 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// =============================================================================
+// PERSISTÊNCIA AUTOMÁTICA EM DISCO (ARQUIVOS SALVOS PERMANENTEMENTE)
+// =============================================================================
+const DB_STORAGE_DIR = path.join(process.cwd(), 'data');
+const DB_STORAGE_FILE = path.join(DB_STORAGE_DIR, 'crm_database.json');
+let lastSavedTimestamp = new Date().toISOString();
+
+function saveDatabaseToDisk() {
+  try {
+    if (!fs.existsSync(DB_STORAGE_DIR)) {
+      fs.mkdirSync(DB_STORAGE_DIR, { recursive: true });
+    }
+    const backup = db.exportCompleteBackup();
+    fs.writeFileSync(DB_STORAGE_FILE, JSON.stringify(backup, null, 2), 'utf-8');
+    lastSavedTimestamp = new Date().toISOString();
+    console.log(`[STORAGE] Dados persistidos com sucesso em ${DB_STORAGE_FILE} (${lastSavedTimestamp})`);
+  } catch (err) {
+    console.error('[STORAGE] Erro ao gravar dados no disco:', err);
+  }
+}
+
+function loadDatabaseFromDisk() {
+  try {
+    if (!fs.existsSync(DB_STORAGE_DIR)) {
+      fs.mkdirSync(DB_STORAGE_DIR, { recursive: true });
+    }
+    if (fs.existsSync(DB_STORAGE_FILE)) {
+      const raw = fs.readFileSync(DB_STORAGE_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      db.importCompleteBackup(parsed);
+      lastSavedTimestamp = parsed.exported_at || new Date().toISOString();
+      console.log(`[STORAGE] Dados carregados do arquivo local: ${DB_STORAGE_FILE}`);
+    } else {
+      saveDatabaseToDisk();
+    }
+  } catch (err) {
+    console.error('[STORAGE] Erro ao carregar dados do disco:', err);
+  }
+}
+
+// Conecta o ouvinte para gravar automaticamente no disco a cada alteração do usuário
+db.setOnChange(() => {
+  saveDatabaseToDisk();
+});
+
+// Carrega o banco persistido imediatamente na inicialização
+loadDatabaseFromDisk();
+
 // Lazy Gemini AI client
 let aiClient: GoogleGenAI | null = null;
 function getGeminiClient(): GoogleGenAI | null {
@@ -467,6 +515,43 @@ async function startServer() {
   // ==========================================
   // 1.3.8 BACKUP COMPLETO & SALVAR NO COMPUTADOR
   // ==========================================
+  app.get('/api/database/status', (req, res) => {
+    try {
+      res.json({
+        status: 'online',
+        filePath: 'data/crm_database.json',
+        absolutePath: DB_STORAGE_FILE,
+        lastSaved: lastSavedTimestamp,
+        existsOnDisk: fs.existsSync(DB_STORAGE_FILE),
+        fileSizeBytes: fs.existsSync(DB_STORAGE_FILE) ? fs.statSync(DB_STORAGE_FILE).size : 0,
+        counts: {
+          companies: db.getCompanies().length,
+          sellers: db.getSellers().length,
+          leads: db.getLeads().length,
+          sales: db.getSales().length,
+          dailyTraffic: db.getDailyStoreTraffic().length,
+          indications: db.getIndications().length
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao verificar status do banco', details: err.message });
+    }
+  });
+
+  app.post('/api/database/save-now', (req, res) => {
+    try {
+      saveDatabaseToDisk();
+      res.json({
+        success: true,
+        message: 'Dados salvos com sucesso no disco! Se o programa fechar, nada será perdido.',
+        lastSaved: lastSavedTimestamp,
+        filePath: 'data/crm_database.json'
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao salvar no disco', details: err.message });
+    }
+  });
+
   app.get('/api/backup/export', (req, res) => {
     try {
       const backupData = db.exportCompleteBackup();
@@ -510,7 +595,49 @@ async function startServer() {
     }
   });
 
-  // 1.3.10 Pacote Python Offline (Download ZIP e Informações)
+  // 1.3.10 Pacote Python Offline (Download ZIP e EXE Direto)
+  app.get('/api/offline-app/download-iniciar-exe', (req, res) => {
+    try {
+      const exePath = path.join(process.cwd(), 'meu_app_offline', 'iniciar_programa.exe');
+      if (!fs.existsSync(exePath)) {
+        return res.status(404).json({ error: 'Arquivo iniciar_programa.exe não encontrado' });
+      }
+      res.setHeader('Content-Type', 'application/vnd.microsoft.portable-executable');
+      res.setHeader('Content-Disposition', 'attachment; filename="iniciar_programa.exe"');
+      res.sendFile(exePath);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao baixar iniciar_programa.exe', details: err.message });
+    }
+  });
+
+  app.get('/api/offline-app/download-exe', (req, res) => {
+    try {
+      const exePath = path.join(process.cwd(), 'meu_app_offline', 'app.exe');
+      if (!fs.existsSync(exePath)) {
+        return res.status(404).json({ error: 'Arquivo app.exe não encontrado' });
+      }
+      res.setHeader('Content-Type', 'application/vnd.microsoft.portable-executable');
+      res.setHeader('Content-Disposition', 'attachment; filename="app.exe"');
+      res.sendFile(exePath);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao baixar app.exe', details: err.message });
+    }
+  });
+
+  app.get('/api/desktop/download-crm-exe', (req, res) => {
+    try {
+      const exePath = path.join(process.cwd(), 'Iniciar_CRM.exe');
+      if (!fs.existsSync(exePath)) {
+        return res.status(404).json({ error: 'Arquivo Iniciar_CRM.exe não encontrado' });
+      }
+      res.setHeader('Content-Type', 'application/vnd.microsoft.portable-executable');
+      res.setHeader('Content-Disposition', 'attachment; filename="Iniciar_CRM.exe"');
+      res.sendFile(exePath);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao baixar Iniciar_CRM.exe', details: err.message });
+    }
+  });
+
   app.get('/api/offline-app/download-zip', async (req, res) => {
     try {
       const zip = new JSZip();
@@ -550,12 +677,14 @@ async function startServer() {
         return res.status(404).json({ error: 'Diretório meu_app_offline não encontrado' });
       }
       const files = [
-        { name: 'app.py', size: fs.existsSync(path.join(offlineDir, 'app.py')) ? fs.statSync(path.join(offlineDir, 'app.py')).size : 0, description: 'Código principal Gradio + ML refatorado 100% offline' },
-        { name: 'run.bat', size: fs.existsSync(path.join(offlineDir, 'run.bat')) ? fs.statSync(path.join(offlineDir, 'run.bat')).size : 0, description: 'Inicializador automático para Windows (2 cliques)' },
+        { name: 'iniciar_programa.exe', size: fs.existsSync(path.join(offlineDir, 'iniciar_programa.exe')) ? fs.statSync(path.join(offlineDir, 'iniciar_programa.exe')).size : 0, description: 'Executável nativo Windows 64-bit para iniciar com 2 cliques' },
+        { name: 'MeuApp.exe', size: fs.existsSync(path.join(offlineDir, 'MeuApp.exe')) ? fs.statSync(path.join(offlineDir, 'MeuApp.exe')).size : 0, description: 'Atalho executável alternativo (.exe)' },
+        { name: 'app.py', size: fs.existsSync(path.join(offlineDir, 'app.py')) ? fs.statSync(path.join(offlineDir, 'app.py')).size : 0, description: 'Código principal com editor de planilhas e salvamento em disco' },
+        { name: 'data/clientes.csv', size: fs.existsSync(path.join(offlineDir, 'data', 'clientes.csv')) ? fs.statSync(path.join(offlineDir, 'data', 'clientes.csv')).size : 0, description: 'Banco de dados de clientes persistente (nada se perde)' },
+        { name: 'run.bat', size: fs.existsSync(path.join(offlineDir, 'run.bat')) ? fs.statSync(path.join(offlineDir, 'run.bat')).size : 0, description: 'Inicializador automático alternativo em lote (.bat)' },
+        { name: 'gerar_executavel_pyinstaller.bat', size: fs.existsSync(path.join(offlineDir, 'gerar_executavel_pyinstaller.bat')) ? fs.statSync(path.join(offlineDir, 'gerar_executavel_pyinstaller.bat')).size : 0, description: 'Compilador para empacotar tudo em um único arquivo com PyInstaller' },
         { name: 'requirements.txt', size: fs.existsSync(path.join(offlineDir, 'requirements.txt')) ? fs.statSync(path.join(offlineDir, 'requirements.txt')).size : 0, description: 'Bibliotecas Python e versões estáveis' },
         { name: 'README.md', size: fs.existsSync(path.join(offlineDir, 'README.md')) ? fs.statSync(path.join(offlineDir, 'README.md')).size : 0, description: 'Manual detalhado passo a passo para o usuário' },
-        { name: '.gitignore', size: fs.existsSync(path.join(offlineDir, '.gitignore')) ? fs.statSync(path.join(offlineDir, '.gitignore')).size : 0, description: 'Regras de exclusão de arquivos Git' },
-        { name: '.env.example', size: fs.existsSync(path.join(offlineDir, '.env.example')) ? fs.statSync(path.join(offlineDir, '.env.example')).size : 0, description: 'Variáveis de ambiente opcionais' },
       ];
       res.json({ files, offlineDir: 'meu_app_offline/' });
     } catch (err: any) {

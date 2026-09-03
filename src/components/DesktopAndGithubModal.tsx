@@ -42,6 +42,53 @@ export const DesktopAndGithubModal: React.FC<DesktopAndGithubModalProps> = ({
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
 
+  // Status da gravação direta em disco permanente
+  const [dbDiskStatus, setDbDiskStatus] = useState<{
+    status: string;
+    filePath: string;
+    lastSaved: string;
+    existsOnDisk: boolean;
+    fileSizeBytes?: number;
+    counts?: {
+      companies: number;
+      sellers: number;
+      leads: number;
+      sales: number;
+      dailyTraffic: number;
+      indications: number;
+    };
+  } | null>(null);
+  const [isSavingDisk, setIsSavingDisk] = useState(false);
+  const [diskSaveMsg, setDiskSaveMsg] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      fetch('/api/database/status')
+        .then(r => r.json())
+        .then(data => setDbDiskStatus(data))
+        .catch(() => {});
+    }
+  }, [isOpen]);
+
+  const handleSaveToDiskNow = async () => {
+    setIsSavingDisk(true);
+    setDiskSaveMsg(null);
+    try {
+      const res = await fetch('/api/database/save-now', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        setDiskSaveMsg(data.message || 'Dados gravados com sucesso no arquivo local!');
+        setDbDiskStatus(prev => prev ? ({ ...prev, lastSaved: data.lastSaved, existsOnDisk: true }) : null);
+      } else {
+        setDiskSaveMsg('Erro ao gravar no disco.');
+      }
+    } catch {
+      setDiskSaveMsg('Erro de comunicação com o servidor local.');
+    } finally {
+      setIsSavingDisk(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const copyToClipboard = (text: string, sectionId: string) => {
@@ -162,6 +209,35 @@ pause
     } finally {
       setIsDownloadingZip(false);
     }
+  };
+
+  // 5. Download Direct iniciar_programa.exe (Windows Executable 2 Cliques)
+  const handleDownloadIniciarExe = () => {
+    const a = document.createElement('a');
+    a.href = '/api/offline-app/download-iniciar-exe';
+    a.download = 'iniciar_programa.exe';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleDownloadOfflineExe = () => {
+    const a = document.createElement('a');
+    a.href = '/api/offline-app/download-exe';
+    a.download = 'app.exe';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  // 6. Download Iniciar_CRM.exe (Windows Executable for CRM)
+  const handleDownloadCrmExe = () => {
+    const a = document.createElement('a');
+    a.href = '/api/desktop/download-crm-exe';
+    a.download = 'Iniciar_CRM.exe';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const gitCommands = `# 1. Inicializar o repositório git na pasta do projeto
@@ -371,25 +447,41 @@ npx electron-builder --win portable`;
                 </p>
               </div>
 
-              {/* Opção C: Script de 2 Cliques no Windows (iniciar-sistema.bat) */}
-              <div className="bg-[#0f1115] p-5 rounded-2xl border border-[#2d3139] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              {/* Opção C: Executável Nativo Windows (Iniciar_CRM.exe) */}
+              <div className="bg-[#0f1115] p-5 rounded-2xl border border-indigo-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                  <h4 className="text-sm font-black text-white flex items-center space-x-2">
-                    <FileCode className="w-4 h-4 text-amber-400" />
-                    <span>Script de Inicialização com 2 Cliques (iniciar-sistema.bat)</span>
+                  <div className="flex items-center space-x-2">
+                    <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-black px-2 py-0.5 rounded border border-indigo-500/30">
+                      WINDOWS NATIVO (.EXE)
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-black text-white flex items-center space-x-2 mt-1">
+                    <Play className="w-4 h-4 text-indigo-400" />
+                    <span>Executável Windows Pronto (Iniciar_CRM.exe)</span>
                   </h4>
                   <p className="text-xs text-[#94a3b8] mt-1">
-                    Baixe o arquivo executável <code className="text-amber-300">.bat</code>. Ao dar dois cliques no Windows, ele inicializa o sistema e abre automaticamente no seu computador.
+                    Baixe o arquivo executável <code className="text-indigo-300">Iniciar_CRM.exe</code> compilado em 64-bit. Dê 2 cliques para iniciar o servidor local e abrir no navegador direto.
                   </p>
                 </div>
 
-                <button
-                  onClick={handleDownloadBat}
-                  className="flex items-center space-x-2 bg-amber-500 hover:bg-amber-600 text-black text-xs font-black px-4 py-2 rounded-xl transition-all shadow-md shrink-0 cursor-pointer"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Baixar iniciar-sistema.bat</span>
-                </button>
+                <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                  <button
+                    onClick={handleDownloadCrmExe}
+                    className="flex items-center space-x-2 bg-gradient-to-r from-indigo-500 to-sky-500 hover:from-indigo-400 hover:to-sky-400 text-white text-xs font-black px-4 py-2.5 rounded-xl transition-all shadow-md cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Baixar Iniciar_CRM.exe</span>
+                  </button>
+
+                  <button
+                    onClick={handleDownloadBat}
+                    className="flex items-center space-x-2 bg-[#1a1d23] hover:bg-[#2d3139] text-[#cbd5e1] text-xs font-bold px-3 py-2 rounded-xl transition-all border border-[#2d3139] cursor-pointer"
+                    title="Baixar alternativo .bat"
+                  >
+                    <FileCode className="w-3.5 h-3.5 text-amber-400" />
+                    <span>.BAT Alternativo</span>
+                  </button>
+                </div>
               </div>
 
             </div>
@@ -475,17 +567,70 @@ npx electron-builder --win portable`;
           {activeTab === 'local_save' && (
             <div className="space-y-5">
               
-              {/* Status de Sincronização Local */}
-              <div className="bg-emerald-950/30 p-4 rounded-2xl border border-emerald-500/40 flex items-center space-x-3">
-                <ShieldCheck className="w-6 h-6 text-emerald-400 shrink-0" />
-                <div>
-                  <div className="text-xs font-bold text-emerald-300">
-                    Salvamento Local Ativo no Computador
+              {/* Status de Sincronização Local com Gravação Direta em Disco */}
+              <div className="bg-emerald-950/30 p-5 rounded-2xl border border-emerald-500/40 space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center space-x-3">
+                    <ShieldCheck className="w-6 h-6 text-emerald-400 shrink-0" />
+                    <div>
+                      <div className="text-sm font-black text-emerald-300 flex items-center space-x-2">
+                        <span>Gravação Automática em Disco Permanente Ativa</span>
+                        <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-mono px-2 py-0.5 rounded border border-emerald-500/40">
+                          data/crm_database.json
+                        </span>
+                      </div>
+                      <div className="text-xs text-[#cbd5e1] mt-0.5">
+                        Qualquer alteração (loja, vendedor, venda, diário de fluxo da vendedora chefe) é gravada imediatamente em arquivo físico no disco. <strong>Se o programa fechar, nada é perdido!</strong>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[11px] text-[#cbd5e1]">
-                    Todas as lojas, vendedores, vendas, campanhas e o diário de fluxo da vendedora chefe ficam gravados e podem ser salvos em arquivo local no seu PC.
+
+                  <button
+                    onClick={handleSaveToDiskNow}
+                    disabled={isSavingDisk}
+                    className="flex items-center space-x-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black px-3.5 py-2 rounded-xl transition-all shadow-md shrink-0 cursor-pointer disabled:opacity-50"
+                    title="Forçar gravação imediata de todos os dados no arquivo data/crm_database.json"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{isSavingDisk ? 'Gravando...' : 'Gravar no Disco Agora'}</span>
+                  </button>
+                </div>
+
+                {/* Métricas e Detalhes do Arquivo */}
+                <div className="bg-[#0f1115] p-3 rounded-xl border border-emerald-500/20 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                  <div>
+                    <span className="text-[#94a3b8] block">Status no Disco:</span>
+                    <span className="font-bold text-emerald-400 flex items-center space-x-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
+                      <span>{dbDiskStatus?.existsOnDisk ? 'Arquivo Presente' : 'Sincronizado'}</span>
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[#94a3b8] block">Última Gravação:</span>
+                    <span className="font-mono text-white">
+                      {dbDiskStatus?.lastSaved ? new Date(dbDiskStatus.lastSaved).toLocaleTimeString('pt-BR') : 'Tempo Real'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[#94a3b8] block">Tamanho:</span>
+                    <span className="font-mono text-white">
+                      {dbDiskStatus?.fileSizeBytes ? `${(dbDiskStatus.fileSizeBytes / 1024).toFixed(1)} KB` : 'Ativo'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[#94a3b8] block">Registros Salvos:</span>
+                    <span className="font-mono text-emerald-300">
+                      {dbDiskStatus?.counts ? `${dbDiskStatus.counts.sales} vendas / ${dbDiskStatus.counts.sellers} vend.` : '100% Salvo'}
+                    </span>
                   </div>
                 </div>
+
+                {diskSaveMsg && (
+                  <div className="bg-emerald-900/40 text-emerald-200 border border-emerald-500/40 p-2.5 rounded-xl text-xs font-bold flex items-center space-x-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>{diskSaveMsg}</span>
+                  </div>
+                )}
               </div>
 
               {/* Ação 1: Baixar e Salvar no Computador */}
@@ -493,10 +638,10 @@ npx electron-builder --win portable`;
                 <div className="space-y-1">
                   <h4 className="text-sm font-black text-white flex items-center space-x-2">
                     <Save className="w-4 h-4 text-emerald-400" />
-                    <span>1. Baixar e Salvar Todos os Dados no Meu Computador</span>
+                    <span>1. Baixar Cópia Extra de Segurança (.JSON)</span>
                   </h4>
                   <p className="text-xs text-[#94a3b8] max-w-md">
-                    Gera um arquivo completo de segurança em formato <code className="text-emerald-400 font-mono">.JSON</code> salvo na sua pasta Downloads com todo o histórico do sistema.
+                    Gera um arquivo completo de segurança em formato <code className="text-emerald-400 font-mono">.JSON</code> salvo na sua pasta Downloads para levar a outro computador.
                   </p>
                 </div>
 
@@ -567,34 +712,46 @@ npx electron-builder --win portable`;
           {activeTab === 'python_offline' && (
             <div className="space-y-6">
               
-              {/* Destaque Principal com Download Direto */}
+              {/* Destaque Principal com Download Direto do Executável Portátil */}
               <div className="bg-gradient-to-br from-amber-950/40 via-[#1a1d23] to-[#0f1115] p-6 rounded-2xl border border-amber-500/30 space-y-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <div className="flex items-center space-x-2">
-                      <span className="bg-amber-500/20 text-amber-300 text-[10px] font-black px-2 py-0.5 rounded border border-amber-500/40">
-                        100% OFFLINE • PRONTO PARA USO
+                      <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-black px-2 py-0.5 rounded border border-emerald-500/40">
+                        EXECUTÁVEL PORTÁTIL .EXE (2 CLIQUES)
                       </span>
-                      <span className="bg-[#1e293b] text-[#94a3b8] text-[10px] font-mono px-2 py-0.5 rounded">
-                        Gradio + ML
+                      <span className="bg-amber-500/20 text-amber-300 text-[10px] font-mono px-2 py-0.5 rounded border border-amber-500/40">
+                        AUTO-SAVE PERMANENTE
                       </span>
                     </div>
                     <h4 className="text-base font-black text-white">
-                      Pacote Python Refatorado para Desktop (Windows/Mac/Linux)
+                      Aplicativo Portátil Offline com Salvamento Permanente
                     </h4>
                     <p className="text-xs text-[#cbd5e1] max-w-xl leading-relaxed">
-                      Código totalmente desacoplado do Google Colab e Google Drive. Todos os caminhos foram convertidos para caminhos relativos com <code className="text-amber-300">pathlib</code>, leitura exclusiva em <code className="text-amber-300">data/</code>, gravação em <code className="text-amber-300">outputs/</code> e fallback resiliente sem internet.
+                      Basta dar <strong>2 cliques</strong> no arquivo executável para abrir o programa. Todas as edições feitas na planilha interativa de clientes e predições são salvas automaticamente em <code className="text-amber-300">data/clientes.csv</code>. Se o programa fechar, <strong>nada se perde</strong>!
                     </p>
                   </div>
 
-                  <button
-                    onClick={handleDownloadOfflineZip}
-                    disabled={isDownloadingZip}
-                    className="flex items-center space-x-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-black text-xs px-5 py-3 rounded-xl shadow-lg transition-all shrink-0 cursor-pointer"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>{isDownloadingZip ? 'Compactando e Baixando...' : 'Baixar Pacote .ZIP Completo'}</span>
-                  </button>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+                    <button
+                      onClick={handleDownloadIniciarExe}
+                      className="flex items-center justify-center space-x-2 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-black font-black text-xs px-4 py-2.5 rounded-xl shadow-lg transition-all cursor-pointer"
+                      title="Baixar executável portátil iniciar_programa.exe (apenas 2 cliques para abrir no Windows)"
+                    >
+                      <Play className="w-4 h-4 fill-black" />
+                      <span>Baixar iniciar_programa.exe</span>
+                    </button>
+
+                    <button
+                      onClick={handleDownloadOfflineZip}
+                      disabled={isDownloadingZip}
+                      className="flex items-center justify-center space-x-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-black text-xs px-4 py-2.5 rounded-xl shadow-lg transition-all cursor-pointer"
+                      title="Baixar pacote completo em ZIP contendo o executável, planilha data/clientes.csv e app.py"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>{isDownloadingZip ? 'Gerando ZIP...' : 'Baixar Pacote .ZIP Completo'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* 3 Passos Rápidos */}
@@ -602,30 +759,62 @@ npx electron-builder --win portable`;
                   <div className="bg-[#0f1115] p-3 rounded-xl border border-[#2d3139] space-y-1">
                     <div className="flex items-center space-x-1.5 text-xs font-bold text-amber-400">
                       <span className="w-4 h-4 rounded-full bg-amber-500/20 flex items-center justify-center text-[10px]">1</span>
-                      <span>Baixar e Extrair</span>
+                      <span>Baixar o Pacote .ZIP</span>
                     </div>
                     <p className="text-[11px] text-[#94a3b8]">
-                      Baixe o <code className="text-amber-300">meu_app_offline.zip</code> e descompacte em qualquer pasta do seu computador.
+                      Baixe o <code className="text-amber-300">meu_app_offline.zip</code> e extraia em qualquer pasta (Área de Trabalho ou Documentos).
                     </p>
                   </div>
 
                   <div className="bg-[#0f1115] p-3 rounded-xl border border-[#2d3139] space-y-1">
                     <div className="flex items-center space-x-1.5 text-xs font-bold text-emerald-400">
                       <span className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px]">2</span>
-                      <span>Executar com 2 Cliques</span>
+                      <span>2 Cliques no .EXE</span>
                     </div>
                     <p className="text-[11px] text-[#94a3b8]">
-                      Dê dois cliques no arquivo <code className="text-emerald-300">run.bat</code>. Ele instala as bibliotecas e inicia o servidor sozinho.
+                      Dê dois cliques no <code className="text-emerald-300">iniciar_programa.exe</code>. O programa abre automaticamente no navegador!
                     </p>
                   </div>
 
                   <div className="bg-[#0f1115] p-3 rounded-xl border border-[#2d3139] space-y-1">
                     <div className="flex items-center space-x-1.5 text-xs font-bold text-sky-400">
                       <span className="w-4 h-4 rounded-full bg-sky-500/20 flex items-center justify-center text-[10px]">3</span>
-                      <span>Acessar no Navegador</span>
+                      <span>Edição com Auto-Save</span>
                     </div>
                     <p className="text-[11px] text-[#94a3b8]">
-                      O app abre no seu navegador em <strong className="text-white">http://localhost:7860</strong> sem precisar de internet!
+                      Edite a planilha diretamente na tela. Tudo é salvo em tempo real. Pode fechar o app quando quiser sem perder nada!
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Destaque do Recurso de Salvamento de Arquivos */}
+              <div className="bg-[#0f1115] p-5 rounded-2xl border border-[#2d3139] space-y-3">
+                <div className="flex items-center space-x-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                  <h4 className="text-sm font-black text-white">
+                    Como Funciona o Salvamento Permanente de Arquivos
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="bg-[#14171d] p-3 rounded-xl border border-[#2d3139] space-y-1.5">
+                    <div className="font-bold text-emerald-400 flex items-center space-x-1.5">
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Aba de Edição Direta de Planilha</span>
+                    </div>
+                    <p className="text-[11px] text-[#cbd5e1]">
+                      Dentro do app há uma aba <strong>"Editar e Cadastrar Clientes"</strong> com uma tabela interativa. Ao clicar em <strong>"Salvar Alterações na Planilha"</strong>, o arquivo <code className="text-amber-300 font-mono">data/clientes.csv</code> é regravado na hora.
+                    </p>
+                  </div>
+
+                  <div className="bg-[#14171d] p-3 rounded-xl border border-[#2d3139] space-y-1.5">
+                    <div className="font-bold text-sky-400 flex items-center space-x-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Se o Programa Fechar, Nada Se Perde</span>
+                    </div>
+                    <p className="text-[11px] text-[#cbd5e1]">
+                      Tanto a planilha quanto o banco em JSON <code className="text-sky-300 font-mono">data/banco_offline.json</code> guardam os novos clientes e as previsões geradas. Ao reabrir o programa, todos os dados continuam lá intactos.
                     </p>
                   </div>
                 </div>
