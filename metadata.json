@@ -1,6 +1,6 @@
 {
   "name": "Attribution CRM & Customer Journey BI",
-  "description": "Painel intuitivo para gestor de tráfego com controle de chegada de clientes, níveis de conversão, gráficos e relatórios executivos (PDF, WhatsApp e CSV).",
+  "description": "Painel comercial e de tráfego simples e intuitivo para controle de chegada de clientes, diário de fluxo de loja para vendedora chefe, vendas e relatórios executivos.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

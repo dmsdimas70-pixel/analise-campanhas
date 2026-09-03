@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
-import { TrafficManagerQuickCards } from './components/TrafficManagerQuickCards';
+import { SimpleOverviewDashboard } from './components/SimpleOverviewDashboard';
 import { TrafficReportsView } from './components/TrafficReportsView';
 import { InstagramGrowthView } from './components/InstagramGrowthView';
 import { ReportGeneratorModal } from './components/ReportGeneratorModal';
@@ -15,6 +15,8 @@ import { SalesTableAndReferrals } from './components/SalesTableAndReferrals';
 import { AIPredictionDrawer } from './components/AIPredictionDrawer';
 import { SqlAndArchitectureModal } from './components/SqlAndArchitectureModal';
 import { AddLeadSaleModal } from './components/AddLeadSaleModal';
+import { DailyStoreTrafficView } from './components/DailyStoreTrafficView';
+import { DesktopAndGithubModal } from './components/DesktopAndGithubModal';
 import { 
   FunnelMetricsResponse, 
   TimelineMetricsResponse, 
@@ -40,17 +42,20 @@ import {
   FileText,
   Instagram,
   Building2,
-  Users
+  Users,
+  Store,
+  Monitor
 } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'instagram' | 'sales' | 'journey' | 'ai' | 'docs'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'store_traffic' | 'instagram' | 'sales' | 'journey' | 'ai' | 'docs'>('dashboard');
   const [deviceMode, setDeviceMode] = useState<'desktop' | 'mobile'>('desktop');
 
   // Multi-Company State
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('empresa-1');
   const [isManageCompanyModalOpen, setIsManageCompanyModalOpen] = useState(false);
+  const [isDesktopModalOpen, setIsDesktopModalOpen] = useState(false);
 
   // Date filters
   const [startDate, setStartDate] = useState('2025-01-01');
@@ -150,18 +155,9 @@ export default function App() {
     }
   };
 
-  // Main Dashboard Content
-  const renderDashboard = () => (
+  // Advanced Technical Charts (accessible via toggle in SimpleOverviewDashboard)
+  const renderAdvancedCharts = () => (
     <div className="space-y-6">
-      {/* Quick Action & KPI Cards */}
-      <TrafficManagerQuickCards
-        funnelMetrics={funnelData}
-        arrivalData={arrivalData}
-        onOpenReport={() => setIsReportModalOpen(true)}
-        onOpenAddModal={() => setIsAddModalOpen(true)}
-        onOpenInstagram={() => setActiveTab('instagram')}
-      />
-
       {/* Gráfico 1: Níveis de Chegada (Nível 1 ao Nível 5) */}
       <ArrivalLevelTrackerChart
         arrivalData={arrivalData}
@@ -211,6 +207,23 @@ export default function App() {
     </div>
   );
 
+  // Main Dashboard Content - Simplified & Clear for everyday users
+  const renderDashboard = () => (
+    <SimpleOverviewDashboard
+      funnelMetrics={funnelData}
+      arrivalData={arrivalData}
+      timelineData={timelineData}
+      attributionData={attributionData}
+      selectedCompanyId={selectedCompanyId}
+      onOpenAddModal={() => setIsAddModalOpen(true)}
+      onOpenReportModal={() => setIsReportModalOpen(true)}
+      onGoToStoreTraffic={() => setActiveTab('store_traffic')}
+      onGoToSales={() => setActiveTab('sales')}
+      onGoToInstagram={() => setActiveTab('instagram')}
+      renderAdvancedCharts={renderAdvancedCharts}
+    />
+  );
+
   return (
     <div className="min-h-screen bg-[#0f1115] text-[#e2e8f0] flex flex-col font-sans selection:bg-[#6366f1] selection:text-white">
       {/* Navigation and Filter Header with Multi-Company Selector */}
@@ -231,6 +244,7 @@ export default function App() {
         onOpenManageCompanies={() => setIsManageCompanyModalOpen(true)}
         onOpenAddModal={() => setIsAddModalOpen(true)}
         onOpenReportModal={() => setIsReportModalOpen(true)}
+        onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
         onRefresh={fetchAllMetrics}
         onResetData={handleResetData}
         isLoading={isLoading}
@@ -258,6 +272,12 @@ export default function App() {
 
               <div className="bg-[#0f1115] rounded-[28px] p-2.5 overflow-y-auto max-h-[750px] custom-scrollbar border border-[#2d3139] space-y-4">
                 {activeTab === 'dashboard' && renderDashboard()}
+                {activeTab === 'store_traffic' && (
+                  <DailyStoreTrafficView 
+                    selectedCompanyId={selectedCompanyId} 
+                    onOpenAddModal={() => setIsAddModalOpen(true)} 
+                  />
+                )}
                 {activeTab === 'reports' && (
                   <TrafficReportsView 
                     onOpenAddModal={() => setIsAddModalOpen(true)} 
@@ -292,6 +312,12 @@ export default function App() {
           /* Desktop BI Dashboard View */
           <div className="space-y-5">
             {activeTab === 'dashboard' && renderDashboard()}
+            {activeTab === 'store_traffic' && (
+              <DailyStoreTrafficView 
+                selectedCompanyId={selectedCompanyId} 
+                onOpenAddModal={() => setIsAddModalOpen(true)} 
+              />
+            )}
             {activeTab === 'reports' && (
               <TrafficReportsView 
                 onOpenAddModal={() => setIsAddModalOpen(true)} 
@@ -348,6 +374,13 @@ export default function App() {
           fetchCompanies();
           fetchAllMetrics();
         }}
+      />
+
+      {/* Desktop & GitHub Setup & Local Backup Modal */}
+      <DesktopAndGithubModal
+        isOpen={isDesktopModalOpen}
+        onClose={() => setIsDesktopModalOpen(false)}
+        onRefreshMetrics={fetchAllMetrics}
       />
     </div>
   );

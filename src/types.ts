@@ -1,6 +1,6 @@
 export type ProductType = 'PRODUTO_A' | 'PRODUTO_B' | 'SERVICO_X' | 'PRODUTO_C' | 'OUTRO';
 
-export type OriginType = 'campanha' | 'organico' | 'social' | 'direto' | 'parceria' | 'outro';
+export type OriginType = 'campanha' | 'organico' | 'social' | 'direto' | 'parceria' | 'indicacao' | 'outro';
 
 export type ArrivalLevel = 
   | 'nivel_1_lead'        // Nível 1: Primeiro Contato / Lead Recebido
@@ -123,6 +123,7 @@ export interface CustomerLead {
   channel: string; // 'Google Ads', 'Meta Ads', 'TikTok Ads', 'Organico', etc.
   origin_type?: OriginType;
   campaign_name?: string; // De qual campanha veio
+  referrer_name?: string;
   seller_id?: string | null;
   seller_name?: string | null;
   status: 'lead' | 'customer_a' | 'customer_ab' | 'churned';
@@ -152,6 +153,7 @@ export interface Sale {
   channel: string;
   origin_type: OriginType;
   campaign_name?: string; // Nome da campanha de onde o produto veio
+  referrer_name?: string;
   seller_id?: string | null;
   seller_name?: string | null;
   arrival_level?: ArrivalLevel;
@@ -161,7 +163,7 @@ export interface Sale {
 export interface JourneyEvent {
   id: string;
   date: string;
-  type: 'LEAD_CREATED' | 'PRIMARY_SALE' | 'CHAINED_SALE';
+  type: 'LEAD_CREATED' | 'PRIMARY_SALE' | 'CHAINED_SALE' | 'INDICATION_MADE' | 'INDICATION_CONVERTED';
   title: string;
   description: string;
   amount?: number;
@@ -337,3 +339,72 @@ export interface AIPredictionResult {
   optimal_contact_window: string;
   projected_revenue_opportunity: number;
 }
+
+export interface Indication {
+  id: string;
+  referrer_id?: string;
+  referrer_name: string;
+  customer_id?: string;
+  customer_name: string;
+  sale_id?: string;
+  date: string;
+  status: 'indicated' | 'converted';
+  amount?: number;
+  notes?: string;
+}
+
+// -------------------------------------------------------------
+// Controle Diário de Fluxo de Loja (Vendedora Chefe)
+// -------------------------------------------------------------
+export interface DailyStoreTraffic {
+  id: string;
+  company_id: string;
+  company_name?: string;
+  date: string; // YYYY-MM-DD
+  recorded_by: string; // Nome da Vendedora Chefe / Gerente de Loja
+  seller_id?: string;
+  customers_arrived: number; // Total de clientes que chegaram no dia (Fluxo de loja / balcão)
+  customers_attended: number; // Clientes atendidos / qualificados pela equipe
+  sales_count: number; // Vendas fechadas no dia
+  revenue: number; // Faturamento total gerado no dia (R$)
+  conversion_rate: number; // (sales_count / customers_arrived) * 100
+  avg_ticket: number; // revenue / sales_count
+  traffic_sources: {
+    paid_ads: number; // Chegaram por Anúncios (Instagram / Facebook / Google Ads)
+    referral_word_of_mouth: number; // Indicação de amigos / Boca a boca
+    walk_in_pedestrians: number; // Passantes / Vitrine / Fachada da loja
+    return_customer: number; // Clientes recorrentes / Recompra
+    other: number; // Outros
+  };
+  shift?: 'integral' | 'manha' | 'tarde' | 'noite';
+  weather_or_event?: string; // Ex: 'Dia ensolarado', 'Chuva forte', 'Black Friday', 'Feriado'
+  notes?: string; // Anotações do dia pela vendedora chefe
+  created_at: string;
+}
+
+export interface DailyStoreTrafficSummary {
+  total_customers_arrived: number;
+  total_customers_attended: number;
+  total_sales: number;
+  total_revenue: number;
+  overall_conversion_rate: number;
+  overall_avg_ticket: number;
+  avg_daily_customers: number;
+  avg_daily_revenue: number;
+  records_count: number;
+  best_traffic_day?: {
+    date: string;
+    customers_arrived: number;
+    sales_count: number;
+    revenue: number;
+  };
+  sources_breakdown: {
+    paid_ads: number;
+    referral_word_of_mouth: number;
+    walk_in_pedestrians: number;
+    return_customer: number;
+    other: number;
+  };
+  records: DailyStoreTraffic[];
+}
+

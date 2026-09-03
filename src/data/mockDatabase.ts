@@ -18,7 +18,10 @@ import {
   ARRIVAL_LEVELS,
   CampaignSummaryItem,
   InstagramGrowthLog,
-  InstagramMetricsSummary
+  InstagramMetricsSummary,
+  DailyStoreTraffic,
+  DailyStoreTrafficSummary,
+  Indication
 } from '../types';
 
 export const PRODUCTS: Product[] = [
@@ -349,18 +352,24 @@ export class AttributionDatabase {
   private leads: CustomerLead[] = [];
   private sales: Sale[] = [];
   private instagramLogs: InstagramGrowthLog[] = [];
+  private dailyStoreTraffic: DailyStoreTraffic[] = [];
+  private indications: Indication[] = [];
 
   constructor() {
     // Starts completely empty as requested ("zere todos os dados para começarem do nada")
     this.leads = [];
     this.sales = [];
     this.instagramLogs = [];
+    this.dailyStoreTraffic = [];
+    this.indications = [];
   }
 
   public resetToEmpty() {
     this.leads = [];
     this.sales = [];
     this.instagramLogs = [];
+    this.dailyStoreTraffic = [];
+    this.indications = [];
   }
 
   public resetToSeed() {
@@ -370,6 +379,59 @@ export class AttributionDatabase {
     this.leads = seed.leads;
     this.sales = seed.sales;
     this.instagramLogs = [];
+    this.indications = [];
+    this.dailyStoreTraffic = [
+      {
+        id: 'traffic-1',
+        company_id: 'empresa-1',
+        company_name: 'Clínica Odonto Prime',
+        date: '2025-02-24',
+        recorded_by: 'Camila Duarte (Vendedora Chefe)',
+        seller_id: 'seller-1-1',
+        customers_arrived: 42,
+        customers_attended: 38,
+        sales_count: 11,
+        revenue: 16500,
+        conversion_rate: 26.2,
+        avg_ticket: 1500,
+        traffic_sources: {
+          paid_ads: 22,
+          referral_word_of_mouth: 9,
+          walk_in_pedestrians: 7,
+          return_customer: 4,
+          other: 0
+        },
+        shift: 'integral',
+        weather_or_event: 'Dia ensolarado / Campanha Meta no ar',
+        notes: 'Excelente movimento após início dos anúncios no Instagram. Clientes focados em implantes.',
+        created_at: '2025-02-24T19:00:00.000Z'
+      },
+      {
+        id: 'traffic-2',
+        company_id: 'empresa-1',
+        company_name: 'Clínica Odonto Prime',
+        date: '2025-02-25',
+        recorded_by: 'Camila Duarte (Vendedora Chefe)',
+        seller_id: 'seller-1-1',
+        customers_arrived: 36,
+        customers_attended: 34,
+        sales_count: 9,
+        revenue: 13500,
+        conversion_rate: 25.0,
+        avg_ticket: 1500,
+        traffic_sources: {
+          paid_ads: 18,
+          referral_word_of_mouth: 8,
+          walk_in_pedestrians: 6,
+          return_customer: 4,
+          other: 0
+        },
+        shift: 'integral',
+        weather_or_event: 'Chuva leve no fim da tarde',
+        notes: 'Boa conversão na consulta inicial.',
+        created_at: '2025-02-25T19:00:00.000Z'
+      }
+    ];
   }
 
   // =============================================================
@@ -616,6 +678,7 @@ export class AttributionDatabase {
         channel: data.channel,
         origin_type: data.origin_type,
         campaign_name: data.campaign_name,
+        referrer_name: data.referrer_name,
         seller_id: data.seller_id || null,
         seller_name: sellerName || null,
         status: data.amount > 0 ? (data.parent_sale_id ? 'customer_ab' : 'customer_a') : 'lead',
@@ -624,6 +687,9 @@ export class AttributionDatabase {
       };
       this.leads.unshift(lead);
     } else {
+      if (data.referrer_name) {
+        lead.referrer_name = data.referrer_name;
+      }
       if (data.seller_id) {
         lead.seller_id = data.seller_id;
         lead.seller_name = sellerName || lead.seller_name;
@@ -649,6 +715,7 @@ export class AttributionDatabase {
         channel: data.channel,
         origin_type: data.origin_type,
         campaign_name: data.campaign_name,
+        referrer_name: data.referrer_name,
         seller_id: data.seller_id || lead.seller_id || null,
         seller_name: sellerName || lead.seller_name || null,
         arrival_level: data.arrival_level || 'nivel_3_produto_a',
@@ -749,6 +816,219 @@ export class AttributionDatabase {
       total_reels: totalReels,
       logs: sortedByDateAsc
     };
+  }
+
+  // =============================================================
+  // INDICATIONS (INDICAÇÕES & BOCA A BOCA)
+  // =============================================================
+  public getIndications(companyId?: string): Indication[] {
+    const indicationsFromSales: Indication[] = this.sales
+      .filter(s => (s.origin_type === 'indicacao' || !!s.referrer_name) && (!companyId || s.company_id === companyId))
+      .map(s => ({
+        id: `ind-${s.id}`,
+        referrer_name: s.referrer_name || 'Cliente Indicador',
+        customer_name: s.customer_name || 'Cliente Indicado',
+        customer_id: s.customer_id,
+        sale_id: s.id,
+        date: s.sale_date,
+        status: 'converted',
+        amount: s.amount,
+        notes: s.notes
+      }));
+    
+    return [...this.indications, ...indicationsFromSales];
+  }
+
+  // =============================================================
+  // DAILY STORE TRAFFIC (FLUXO DIÁRIO DE LOJA - VENDEDORA CHEFE)
+  // =============================================================
+  public getDailyStoreTraffic(startDate?: string, endDate?: string, companyId?: string): DailyStoreTraffic[] {
+    let list = this.dailyStoreTraffic;
+    if (companyId && companyId !== 'all') {
+      list = list.filter(item => item.company_id === companyId);
+    }
+    if (startDate) {
+      list = list.filter(item => item.date >= startDate);
+    }
+    if (endDate) {
+      list = list.filter(item => item.date <= endDate);
+    }
+    return [...list].sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  public addDailyStoreTraffic(data: Omit<DailyStoreTraffic, 'id' | 'created_at' | 'conversion_rate' | 'avg_ticket'>): DailyStoreTraffic {
+    const company = this.getCompany(data.company_id);
+    const customersArrived = Number(data.customers_arrived) || 0;
+    const salesCount = Number(data.sales_count) || 0;
+    const revenue = Number(data.revenue) || 0;
+
+    const conversionRate = customersArrived > 0 
+      ? Number(((salesCount / customersArrived) * 100).toFixed(1)) 
+      : 0;
+    const avgTicket = salesCount > 0 
+      ? Number((revenue / salesCount).toFixed(2)) 
+      : 0;
+
+    const newRecord: DailyStoreTraffic = {
+      ...data,
+      id: `traffic-${Date.now()}`,
+      company_name: company?.name || 'Loja',
+      customers_arrived: customersArrived,
+      customers_attended: Number(data.customers_attended) || 0,
+      sales_count: salesCount,
+      revenue,
+      conversion_rate: conversionRate,
+      avg_ticket: avgTicket,
+      traffic_sources: {
+        paid_ads: Number(data.traffic_sources?.paid_ads) || 0,
+        referral_word_of_mouth: Number(data.traffic_sources?.referral_word_of_mouth) || 0,
+        walk_in_pedestrians: Number(data.traffic_sources?.walk_in_pedestrians) || 0,
+        return_customer: Number(data.traffic_sources?.return_customer) || 0,
+        other: Number(data.traffic_sources?.other) || 0
+      },
+      created_at: new Date().toISOString()
+    };
+
+    this.dailyStoreTraffic.unshift(newRecord);
+    return newRecord;
+  }
+
+  public updateDailyStoreTraffic(id: string, updates: Partial<DailyStoreTraffic>): DailyStoreTraffic | null {
+    const idx = this.dailyStoreTraffic.findIndex(t => t.id === id);
+    if (idx === -1) return null;
+
+    const current = this.dailyStoreTraffic[idx];
+    const updated = { ...current, ...updates };
+
+    const customersArrived = Number(updated.customers_arrived) || 0;
+    const salesCount = Number(updated.sales_count) || 0;
+    const revenue = Number(updated.revenue) || 0;
+
+    updated.conversion_rate = customersArrived > 0 
+      ? Number(((salesCount / customersArrived) * 100).toFixed(1)) 
+      : 0;
+    updated.avg_ticket = salesCount > 0 
+      ? Number((revenue / salesCount).toFixed(2)) 
+      : 0;
+
+    this.dailyStoreTraffic[idx] = updated;
+    return updated;
+  }
+
+  public deleteDailyStoreTraffic(id: string): boolean {
+    const initialLen = this.dailyStoreTraffic.length;
+    this.dailyStoreTraffic = this.dailyStoreTraffic.filter(t => t.id !== id);
+    return this.dailyStoreTraffic.length < initialLen;
+  }
+
+  public getDailyStoreTrafficSummary(startDate?: string, endDate?: string, companyId?: string): DailyStoreTrafficSummary {
+    const records = this.getDailyStoreTraffic(startDate, endDate, companyId);
+    
+    if (records.length === 0) {
+      return {
+        total_customers_arrived: 0,
+        total_customers_attended: 0,
+        total_sales: 0,
+        total_revenue: 0,
+        overall_conversion_rate: 0,
+        overall_avg_ticket: 0,
+        avg_daily_customers: 0,
+        avg_daily_revenue: 0,
+        records_count: 0,
+        sources_breakdown: {
+          paid_ads: 0,
+          referral_word_of_mouth: 0,
+          walk_in_pedestrians: 0,
+          return_customer: 0,
+          other: 0
+        },
+        records: []
+      };
+    }
+
+    const totalCustomersArrived = records.reduce((sum, r) => sum + r.customers_arrived, 0);
+    const totalCustomersAttended = records.reduce((sum, r) => sum + r.customers_attended, 0);
+    const totalSales = records.reduce((sum, r) => sum + r.sales_count, 0);
+    const totalRevenue = records.reduce((sum, r) => sum + r.revenue, 0);
+
+    const overallConversionRate = totalCustomersArrived > 0 
+      ? Number(((totalSales / totalCustomersArrived) * 100).toFixed(1)) 
+      : 0;
+    const overallAvgTicket = totalSales > 0 
+      ? Number((totalRevenue / totalSales).toFixed(2)) 
+      : 0;
+    const avgDailyCustomers = Math.round(totalCustomersArrived / records.length);
+    const avgDailyRevenue = Math.round(totalRevenue / records.length);
+
+    let bestDay = records[0];
+    for (const r of records) {
+      if (r.revenue > bestDay.revenue) {
+        bestDay = r;
+      }
+    }
+
+    const sourcesBreakdown = records.reduce((acc, r) => ({
+      paid_ads: acc.paid_ads + (r.traffic_sources?.paid_ads || 0),
+      referral_word_of_mouth: acc.referral_word_of_mouth + (r.traffic_sources?.referral_word_of_mouth || 0),
+      walk_in_pedestrians: acc.walk_in_pedestrians + (r.traffic_sources?.walk_in_pedestrians || 0),
+      return_customer: acc.return_customer + (r.traffic_sources?.return_customer || 0),
+      other: acc.other + (r.traffic_sources?.other || 0)
+    }), {
+      paid_ads: 0,
+      referral_word_of_mouth: 0,
+      walk_in_pedestrians: 0,
+      return_customer: 0,
+      other: 0
+    });
+
+    return {
+      total_customers_arrived: totalCustomersArrived,
+      total_customers_attended: totalCustomersAttended,
+      total_sales: totalSales,
+      total_revenue: totalRevenue,
+      overall_conversion_rate: overallConversionRate,
+      overall_avg_ticket: overallAvgTicket,
+      avg_daily_customers: avgDailyCustomers,
+      avg_daily_revenue: avgDailyRevenue,
+      records_count: records.length,
+      best_traffic_day: {
+        date: bestDay.date,
+        customers_arrived: bestDay.customers_arrived,
+        sales_count: bestDay.sales_count,
+        revenue: bestDay.revenue
+      },
+      sources_breakdown: sourcesBreakdown,
+      records
+    };
+  }
+
+  // Backup e Restauração Completa de Dados (Salvar no Computador)
+  public exportCompleteBackup() {
+    return {
+      version: '1.0.0',
+      exported_at: new Date().toISOString(),
+      companies: this.companies,
+      sellers: this.sellers,
+      leads: this.leads,
+      sales: this.sales,
+      instagramLogs: this.instagramLogs,
+      dailyStoreTraffic: this.dailyStoreTraffic,
+      indications: this.indications
+    };
+  }
+
+  public importCompleteBackup(data: any): boolean {
+    if (data && typeof data === 'object') {
+      if (Array.isArray(data.companies)) this.companies = data.companies;
+      if (Array.isArray(data.sellers)) this.sellers = data.sellers;
+      if (Array.isArray(data.leads)) this.leads = data.leads;
+      if (Array.isArray(data.sales)) this.sales = data.sales;
+      if (Array.isArray(data.instagramLogs)) this.instagramLogs = data.instagramLogs;
+      if (Array.isArray(data.dailyStoreTraffic)) this.dailyStoreTraffic = data.dailyStoreTraffic;
+      if (Array.isArray(data.indications)) this.indications = data.indications;
+      return true;
+    }
+    return false;
   }
 
   // =============================================================

@@ -1,0 +1,29 @@
+# Ambientes virtuais Python
+venv/
+env/
+.venv/
+ENV/
+
+# Arquivos de compilação Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Configurações locais e segredos
+.env
+.env.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# Arquivos temporários do SO
+.DS_Store
+Thumbs.db
+
+# Manter estrutura de pastas mas ignorar saídas geradas pesadas
+outputs/*
+!outputs/.gitkeep

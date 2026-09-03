@@ -1,8 +1,10 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import JSZip from 'jszip';
 import { db, PRODUCTS } from './src/data/mockDatabase';
 import { SQL_DDL_SCRIPT, MATERIALIZED_VIEW_SQL, MOBILE_TECH_COMPARISON, PERFORMANCE_STRATEGY } from './src/data/technicalDocs';
 import dotenv from 'dotenv';
@@ -349,6 +351,215 @@ async function startServer() {
       }
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao excluir registro do Instagram', details: err.message });
+    }
+  });
+
+  // ==========================================
+  // 1.3.7 FLUXO DIÁRIO DE LOJA (VENDEDORA CHEFE)
+  // ==========================================
+  app.get('/api/daily-store-traffic', (req, res) => {
+    try {
+      const { startDate, endDate, company_id } = req.query as {
+        startDate?: string;
+        endDate?: string;
+        company_id?: string;
+      };
+      const list = db.getDailyStoreTraffic(startDate, endDate, company_id);
+      res.json(list);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao listar fluxo diário de loja', details: err.message });
+    }
+  });
+
+  app.get('/api/daily-store-traffic/summary', (req, res) => {
+    try {
+      const { startDate, endDate, company_id } = req.query as {
+        startDate?: string;
+        endDate?: string;
+        company_id?: string;
+      };
+      const summary = db.getDailyStoreTrafficSummary(startDate, endDate, company_id);
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao obter resumo do fluxo diário', details: err.message });
+    }
+  });
+
+  app.post('/api/daily-store-traffic', (req, res) => {
+    try {
+      const {
+        company_id,
+        date,
+        recorded_by,
+        seller_id,
+        customers_arrived,
+        customers_attended,
+        sales_count,
+        revenue,
+        traffic_sources,
+        shift,
+        weather_or_event,
+        notes
+      } = req.body;
+
+      if (!company_id) {
+        return res.status(400).json({ error: 'Empresa/Loja é obrigatória.' });
+      }
+      if (!recorded_by) {
+        return res.status(400).json({ error: 'Nome da vendedora chefe / responsável é obrigatório.' });
+      }
+
+      const record = db.addDailyStoreTraffic({
+        company_id,
+        date: date || new Date().toISOString().split('T')[0],
+        recorded_by,
+        seller_id,
+        customers_arrived: Number(customers_arrived) || 0,
+        customers_attended: Number(customers_attended) || 0,
+        sales_count: Number(sales_count) || 0,
+        revenue: Number(revenue) || 0,
+        traffic_sources: traffic_sources || {
+          paid_ads: 0,
+          referral_word_of_mouth: 0,
+          walk_in_pedestrians: 0,
+          return_customer: 0,
+          other: 0
+        },
+        shift: shift || 'integral',
+        weather_or_event,
+        notes
+      });
+
+      res.status(201).json({ success: true, record });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao registrar fluxo diário', details: err.message });
+    }
+  });
+
+  app.patch('/api/daily-store-traffic/:id', (req, res) => {
+    try {
+      const { id } = req.params;
+      const updated = db.updateDailyStoreTraffic(id, req.body);
+      if (updated) {
+        res.json({ success: true, record: updated });
+      } else {
+        res.status(404).json({ error: 'Registro de fluxo diário não encontrado' });
+      }
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao atualizar fluxo diário', details: err.message });
+    }
+  });
+
+  app.delete('/api/daily-store-traffic/:id', (req, res) => {
+    try {
+      const { id } = req.params;
+      const ok = db.deleteDailyStoreTraffic(id);
+      if (ok) {
+        res.json({ success: true, message: 'Registro de fluxo excluído com sucesso' });
+      } else {
+        res.status(404).json({ error: 'Registro de fluxo não encontrado' });
+      }
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao excluir fluxo diário', details: err.message });
+    }
+  });
+
+  // ==========================================
+  // 1.3.8 BACKUP COMPLETO & SALVAR NO COMPUTADOR
+  // ==========================================
+  app.get('/api/backup/export', (req, res) => {
+    try {
+      const backupData = db.exportCompleteBackup();
+      res.json(backupData);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao exportar backup', details: err.message });
+    }
+  });
+
+  app.post('/api/backup/import', (req, res) => {
+    try {
+      const ok = db.importCompleteBackup(req.body);
+      if (ok) {
+        res.json({
+          success: true,
+          message: 'Dados restaurados com sucesso no computador!',
+          counts: {
+            companies: db.getCompanies().length,
+            sellers: db.getSellers().length,
+            leads: db.getLeads().length,
+            sales: db.getSales().length,
+            dailyTraffic: db.getDailyStoreTraffic().length
+          }
+        });
+      } else {
+        res.status(400).json({ error: 'Estrutura de arquivo inválida' });
+      }
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao importar backup', details: err.message });
+    }
+  });
+
+  // 1.3.9 Indicações
+  app.get('/api/indications', (req, res) => {
+    try {
+      const { company_id } = req.query as { company_id?: string };
+      const indications = db.getIndications(company_id);
+      res.json(indications);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao listar indicações', details: err.message });
+    }
+  });
+
+  // 1.3.10 Pacote Python Offline (Download ZIP e Informações)
+  app.get('/api/offline-app/download-zip', async (req, res) => {
+    try {
+      const zip = new JSZip();
+      const offlineDir = path.join(process.cwd(), 'meu_app_offline');
+
+      function addDirToZip(dirPath: string, zipFolder: any) {
+        if (!fs.existsSync(dirPath)) return;
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dirPath, entry.name);
+          if (entry.isDirectory()) {
+            const subFolder = zipFolder.folder(entry.name);
+            addDirToZip(fullPath, subFolder);
+          } else {
+            const fileData = fs.readFileSync(fullPath);
+            zipFolder.file(entry.name, fileData);
+          }
+        }
+      }
+
+      addDirToZip(offlineDir, zip);
+      const content = await zip.generateAsync({ type: 'nodebuffer' });
+
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename="meu_app_offline.zip"');
+      res.send(content);
+    } catch (err: any) {
+      console.error('Erro ao gerar zip offline:', err);
+      res.status(500).json({ error: 'Erro ao gerar pacote ZIP offline', details: err.message });
+    }
+  });
+
+  app.get('/api/offline-app/files', (req, res) => {
+    try {
+      const offlineDir = path.join(process.cwd(), 'meu_app_offline');
+      if (!fs.existsSync(offlineDir)) {
+        return res.status(404).json({ error: 'Diretório meu_app_offline não encontrado' });
+      }
+      const files = [
+        { name: 'app.py', size: fs.existsSync(path.join(offlineDir, 'app.py')) ? fs.statSync(path.join(offlineDir, 'app.py')).size : 0, description: 'Código principal Gradio + ML refatorado 100% offline' },
+        { name: 'run.bat', size: fs.existsSync(path.join(offlineDir, 'run.bat')) ? fs.statSync(path.join(offlineDir, 'run.bat')).size : 0, description: 'Inicializador automático para Windows (2 cliques)' },
+        { name: 'requirements.txt', size: fs.existsSync(path.join(offlineDir, 'requirements.txt')) ? fs.statSync(path.join(offlineDir, 'requirements.txt')).size : 0, description: 'Bibliotecas Python e versões estáveis' },
+        { name: 'README.md', size: fs.existsSync(path.join(offlineDir, 'README.md')) ? fs.statSync(path.join(offlineDir, 'README.md')).size : 0, description: 'Manual detalhado passo a passo para o usuário' },
+        { name: '.gitignore', size: fs.existsSync(path.join(offlineDir, '.gitignore')) ? fs.statSync(path.join(offlineDir, '.gitignore')).size : 0, description: 'Regras de exclusão de arquivos Git' },
+        { name: '.env.example', size: fs.existsSync(path.join(offlineDir, '.env.example')) ? fs.statSync(path.join(offlineDir, '.env.example')).size : 0, description: 'Variáveis de ambiente opcionais' },
+      ];
+      res.json({ files, offlineDir: 'meu_app_offline/' });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao ler arquivos offline', details: err.message });
     }
   });
 
